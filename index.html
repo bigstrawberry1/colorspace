@@ -173,6 +173,33 @@
             z-index: 1000;
             display: none;
         }
+        .export-btn {
+            padding: 5px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .export-btn:hover {
+            background: #45a049;
+        }
+        .import-btn {
+            padding: 5px 15px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .import-btn:hover {
+            background: #1976D2;
+        }
+        .hidden-input {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -210,7 +237,12 @@
             <span class="close-modal">&times;</span>
             <div class="modal-header">
                 <h2>保存的点位</h2>
-                <button id="clearPoints" class="clear-btn">清空</button>
+                <div>
+                    <input type="file" id="importFile" accept=".csv" class="hidden-input">
+                    <button id="importPoints" class="import-btn">导入表格</button>
+                    <button id="exportPoints" class="export-btn">导出表格</button>
+                    <button id="clearPoints" class="clear-btn">清空</button>
+                </div>
             </div>
             <div id="savedPointsList"></div>
         </div>
@@ -702,6 +734,107 @@
             if (event.target === modal) {
                 modal.style.display = 'none';
             }
+        });
+
+        // 添加导出功能
+        const exportBtn = document.getElementById('exportPoints');
+        exportBtn.addEventListener('click', () => {
+            if (savedPoints.length === 0) {
+                alert('没有可导出的点位！');
+                return;
+            }
+
+            // 创建CSV内容
+            let csvContent = 'data:text/csv;charset=utf-8,\uFEFF'; // 添加BOM以支持中文
+            
+            // 添加表头
+            csvContent += '备注,L,a,b,RGB颜色值\n';
+            
+            // 添加数据行
+            savedPoints.forEach(point => {
+                const row = [
+                    point.note || '无',
+                    point.L,
+                    point.a,
+                    point.b,
+                    point.color
+                ].join(',');
+                csvContent += row + '\n';
+            });
+
+            // 创建下载链接
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodedUri);
+            link.setAttribute('download', 'lab_colors.csv');
+            
+            // 触发下载
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // 添加导入功能
+        const importBtn = document.getElementById('importPoints');
+        const fileInput = document.getElementById('importFile');
+
+        importBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+                
+                // 跳过表头
+                if (lines.length < 2) {
+                    alert('文件格式错误！');
+                    return;
+                }
+
+                // 解析并创建点位
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    const values = line.split(',');
+                    if (values.length < 4) continue;
+
+                    const note = values[0];
+                    const L = parseFloat(values[1]);
+                    const a = parseFloat(values[2]);
+                    const b = parseFloat(values[3]);
+
+                    if (isNaN(L) || isNaN(a) || isNaN(b)) continue;
+
+                    // 创建新的点并保存
+                    const newPoint = createKeyPoint(L, a, b);
+                    const rgb = lab2rgb(L, a, b);
+                    
+                    savedPoints.push({
+                        L: L,
+                        a: a,
+                        b: b,
+                        color: `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`,
+                        note: note === '无' ? '' : note,
+                        mesh: newPoint
+                    });
+                }
+
+                // 刷新显示
+                if (modal.style.display === 'block') {
+                    showSavedPointsBtn.click();
+                }
+                
+                alert('导入完成！');
+                fileInput.value = ''; // 清空文件输入
+            };
+            reader.readAsText(file);
         });
 
         // 初始化
